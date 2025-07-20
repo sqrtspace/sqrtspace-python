@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sqrtspace-spacetime"
+version = "0.1.0"
+authors = [
+    {name = "David H. Friedel Jr.", email = "dfriedel@marketally.com"},
+    {name = "SqrtSpace Contributors"}
+]
+description = "Memory-efficient algorithms and data structures using Williams' √n space-time tradeoffs"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Archiving :: Compression",
+    "Topic :: Database",
+    "Operating System :: OS Independent",
+]
+keywords = ["memory", "efficiency", "algorithms", "spacetime", "external-memory", "streaming"]
+dependencies = [
+    "numpy>=1.20.0",
+    "psutil>=5.8.0",
+    "aiofiles>=0.8.0",
+    "tqdm>=4.62.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.20.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "flake8>=5.0.0",
+    "mypy>=0.990",
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+]
+pandas = ["pandas>=1.3.0"]
+dask = ["dask[complete]>=2022.1.0"]
+ray = ["ray>=2.0.0"]
+all = ["sqrtspace-spacetime[pandas,dask,ray]"]
+
+[project.urls]
+Homepage = "https://github.com/sqrtspace/sqrtspace-python"
+Documentation = "https://sqrtspace-spacetime.readthedocs.io"
+Repository = "https://github.com/sqrtspace/sqrtspace-python.git"
+Issues = "https://github.com/sqrtspace/sqrtspace-python/issues"
+
+[project.scripts]
+spacetime = "sqrtspace_spacetime.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sqrtspace_spacetime = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_functions = ["test_*"]
+python_classes = ["Test*"]
+addopts = "-v --cov=sqrtspace_spacetime --cov-report=html --cov-report=term"
+
+[tool.coverage.run]
+source = ["src/sqrtspace_spacetime"]
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
