@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "sqrtspace-spacetime"
 version = "0.1.0"
 authors = [
-    {name = "David H. Friedel Jr.", email = "dfriedel@marketally.com"},
+    {name = "David H. Friedel Jr.", email = "dfriedel@marketally.ai"},
     {name = "SqrtSpace Contributors"}
 ]
 description = "Memory-efficient algorithms and data structures using Williams' √n space-time tradeoffs"

@@ -1,5 +1,5 @@
 """
-Ubiquity SpaceTime: Memory-efficient algorithms using √n space-time tradeoffs.
+SqrtSpace SpaceTime: Memory-efficient algorithms using √n space-time tradeoffs.
 
 This package implements Williams' theoretical computer science results showing
 that many algorithms can achieve better memory usage by accepting slightly
@@ -13,7 +13,7 @@ from sqrtspace_spacetime.streams import Stream
 from sqrtspace_spacetime.memory import MemoryMonitor, MemoryPressureLevel
 
 __version__ = "0.1.0"
-__author__ = "Ubiquity SpaceTime Contributors"
+__author__ = "SqrtSpace SpaceTime Contributors"
 __license__ = "Apache-2.0"
 
 __all__ = [

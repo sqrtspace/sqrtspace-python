@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Basic usage examples for Ubiquity SpaceTime.
+Basic usage examples for SqrtSpace SpaceTime.
 """
 
 import time
@@ -175,7 +175,7 @@ def example_spacetime_dict():
 
 def main():
     """Run all examples."""
-    print("=== Ubiquity SpaceTime Examples ===")
+    print("=== SqrtSpace SpaceTime Examples ===")
     
     # Configure SpaceTime
     SpaceTimeConfig.set_defaults(

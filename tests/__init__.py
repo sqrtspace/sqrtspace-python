@@ -1,1 +1,1 @@
-# Ubiquity SpaceTime Test Suite
+# SqrtSpace SpaceTime Test Suite
