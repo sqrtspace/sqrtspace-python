@@ -7,6 +7,8 @@
 
 Memory-efficient algorithms and data structures for Python using Williams' √n space-time tradeoffs.
 
+**Paper Repository**: [github.com/sqrtspace/sqrtspace-paper](https://github.com/sqrtspace/sqrtspace-paper)  
+
 ## Installation
 
 ```bash
