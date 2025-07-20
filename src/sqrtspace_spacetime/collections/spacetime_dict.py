@@ -102,10 +102,19 @@ class SpaceTimeDict(MutableMapping):
             raise KeyError(key)
     
     def __iter__(self) -> Iterator[Any]:
+        # Create a snapshot of keys to avoid mutation during iteration
+        hot_keys = list(self._hot_data.keys())
+        cold_keys = list(self._cold_keys)
+        
         # Iterate hot keys first
-        yield from self._hot_data
+        for key in hot_keys:
+            if key in self._hot_data:  # Check key still exists
+                yield key
+        
         # Then cold keys
-        yield from self._cold_keys
+        for key in cold_keys:
+            if key in self._cold_keys:  # Check key still exists
+                yield key
     
     def __contains__(self, key: Any) -> bool:
         return key in self._hot_data or key in self._cold_keys

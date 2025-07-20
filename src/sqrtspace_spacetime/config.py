@@ -65,9 +65,9 @@ class SpaceTimeConfig:
     
     # Chunking
     chunk_strategy: ChunkStrategy = ChunkStrategy.SQRT_N
-    fixed_chunk_size: int = 10000
-    min_chunk_size: int = 100
-    max_chunk_size: int = 10_000_000
+    fixed_chunk_size: int = 1000
+    min_chunk_size: int = 10
+    max_chunk_size: int = 10_000
     
     # Checkpointing
     enable_checkpointing: bool = True

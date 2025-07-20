@@ -6,8 +6,16 @@ import os
 import pickle
 import tempfile
 import weakref
+import threading
 from typing import Any, Iterator, Optional, Union, List
 from collections.abc import MutableSequence
+
+# Platform-specific imports
+try:
+    import fcntl
+    HAS_FCNTL = True
+except ImportError:
+    HAS_FCNTL = False  # Windows doesn't have fcntl
 
 from sqrtspace_spacetime.config import config
 from sqrtspace_spacetime.memory import monitor, MemoryPressureLevel
@@ -30,16 +38,23 @@ class SpaceTimeArray(MutableSequence):
             storage_path: Path for external storage (None for temp)
         """
         if threshold == 'auto' or threshold is None:
-            self.threshold = config.calculate_chunk_size(10000)
+            # Start with a reasonable default, will adjust dynamically
+            self.threshold = 100
+            self._auto_threshold = True
         else:
             self.threshold = int(threshold)
+            self._auto_threshold = False
         self.storage_path = storage_path or config.external_storage_path
+        # Ensure storage directory exists
+        if self.storage_path:
+            os.makedirs(self.storage_path, exist_ok=True)
         
         self._hot_data: List[Any] = []
         self._cold_indices: set = set()
         self._cold_storage: Optional[str] = None
         self._length = 0
         self._cold_file_handle = None
+        self._lock = threading.RLock()  # Reentrant lock for thread safety
         
         # Register for memory pressure handling
         SpaceTimeArray._instances.add(self)
@@ -48,22 +63,28 @@ class SpaceTimeArray(MutableSequence):
         return self._length
     
     def __getitem__(self, index: Union[int, slice]) -> Any:
-        if isinstance(index, slice):
-            return [self[i] for i in range(*index.indices(len(self)))]
-        
-        if index < 0:
-            index += self._length
-        
-        if not 0 <= index < self._length:
-            raise IndexError("list index out of range")
-        
-        # Check if in hot storage
-        if index not in self._cold_indices:
-            hot_index = index - len(self._cold_indices)
+        with self._lock:
+            if isinstance(index, slice):
+                return [self[i] for i in range(*index.indices(len(self)))]
+            
+            if index < 0:
+                index += self._length
+            
+            if not 0 <= index < self._length:
+                raise IndexError("list index out of range")
+            
+            # Check if in cold storage
+            if index in self._cold_indices:
+                return self._load_from_cold(index)
+            
+            # Calculate hot index - need to account for items before this that are cold
+            cold_before = sum(1 for i in self._cold_indices if i < index)
+            hot_index = index - cold_before
+            
+            if hot_index < 0 or hot_index >= len(self._hot_data):
+                raise IndexError("list index out of range")
+                
             return self._hot_data[hot_index]
-        
-        # Load from cold storage
-        return self._load_from_cold(index)
     
     def __setitem__(self, index: Union[int, slice], value: Any) -> None:
         if isinstance(index, slice):
@@ -116,12 +137,13 @@ class SpaceTimeArray(MutableSequence):
     
     def append(self, value: Any) -> None:
         """Append an item to the array."""
-        self._hot_data.append(value)
-        self._length += 1
-        
-        # Check if we need to spill
-        if len(self._hot_data) > self.threshold:
-            self._check_and_spill()
+        with self._lock:
+            self._hot_data.append(value)
+            self._length += 1
+            
+            # Check if we need to spill
+            if len(self._hot_data) > self.threshold:
+                self._check_and_spill()
     
     def extend(self, iterable) -> None:
         """Extend array with items from iterable."""
@@ -150,10 +172,22 @@ class SpaceTimeArray(MutableSequence):
     
     def _check_and_spill(self) -> None:
         """Check memory pressure and spill to disk if needed."""
+        # Update threshold dynamically if in auto mode
+        if self._auto_threshold and self._length > 0:
+            self.threshold = config.calculate_chunk_size(self._length)
+        
         # Check memory pressure
         pressure = monitor.check_memory_pressure()
         
-        if pressure >= MemoryPressureLevel.MEDIUM or len(self._hot_data) > self.threshold:
+        # Also check actual memory usage every 100 items
+        should_spill = pressure >= MemoryPressureLevel.MEDIUM or len(self._hot_data) > self.threshold
+        
+        if not should_spill and self._length % 100 == 0:
+            memory_limit = SpaceTimeConfig.memory_limit
+            if memory_limit and self.memory_usage() > memory_limit * 0.05:  # Use 5% of total limit
+                should_spill = True
+        
+        if should_spill:
             self._spill_to_disk()
     
     def _spill_to_disk(self) -> None:
@@ -168,55 +202,101 @@ class SpaceTimeArray(MutableSequence):
         # Determine how many items to spill
         spill_count = len(self._hot_data) // 2
         
-        # Load existing cold data
-        cold_data = {}
-        if os.path.exists(self._cold_storage):
-            with open(self._cold_storage, 'rb') as f:
+        with self._lock:
+            # Load existing cold data
+            cold_data = {}
+            if os.path.exists(self._cold_storage):
                 try:
-                    cold_data = pickle.load(f)
-                except EOFError:
+                    with open(self._cold_storage, 'rb') as f:
+                        if HAS_FCNTL:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                        try:
+                            cold_data = pickle.load(f)
+                        finally:
+                            if HAS_FCNTL:
+                                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                except (EOFError, pickle.UnpicklingError):
                     cold_data = {}
-        
-        # Move items to cold storage
-        current_cold_size = len(self._cold_indices)
-        for i in range(spill_count):
-            cold_data[current_cold_size + i] = self._hot_data[i]
-            self._cold_indices.add(current_cold_size + i)
-        
-        # Remove from hot storage
-        self._hot_data = self._hot_data[spill_count:]
-        
-        # Save cold data
-        with open(self._cold_storage, 'wb') as f:
-            pickle.dump(cold_data, f)
+            
+            # Move items to cold storage
+            current_cold_size = len(self._cold_indices)
+            for i in range(spill_count):
+                cold_data[current_cold_size + i] = self._hot_data[i]
+                self._cold_indices.add(current_cold_size + i)
+            
+            # Remove from hot storage
+            self._hot_data = self._hot_data[spill_count:]
+            
+            # Save cold data
+            with open(self._cold_storage, 'wb') as f:
+                if HAS_FCNTL:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    pickle.dump(cold_data, f)
+                finally:
+                    if HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     
     def _load_from_cold(self, index: int) -> Any:
         """Load an item from cold storage."""
-        if not self._cold_storage or not os.path.exists(self._cold_storage):
-            raise IndexError(f"Cold storage index {index} not found")
-        
-        with open(self._cold_storage, 'rb') as f:
-            cold_data = pickle.load(f)
-        
-        return cold_data.get(index)
+        with self._lock:
+            if not self._cold_storage or not os.path.exists(self._cold_storage):
+                raise IndexError(f"Cold storage index {index} not found")
+            
+            try:
+                with open(self._cold_storage, 'rb') as f:
+                    if HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_SH)  # Shared lock for reading
+                    try:
+                        cold_data = pickle.load(f)
+                    finally:
+                        if HAS_FCNTL:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except (EOFError, pickle.UnpicklingError):
+                return None
+            
+            return cold_data.get(index)
     
     def _update_cold(self, index: int, value: Any) -> None:
         """Update an item in cold storage."""
-        if not self._cold_storage:
-            return
-        
-        with open(self._cold_storage, 'rb') as f:
-            cold_data = pickle.load(f)
-        
-        cold_data[index] = value
-        
-        with open(self._cold_storage, 'wb') as f:
-            pickle.dump(cold_data, f)
+        with self._lock:
+            if not self._cold_storage:
+                return
+            
+            try:
+                with open(self._cold_storage, 'rb') as f:
+                    if HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # Exclusive lock
+                    try:
+                        cold_data = pickle.load(f)
+                    finally:
+                        if HAS_FCNTL:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except (EOFError, pickle.UnpicklingError):
+                cold_data = {}
+            
+            cold_data[index] = value
+            
+            with open(self._cold_storage, 'wb') as f:
+                if HAS_FCNTL:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    pickle.dump(cold_data, f)
+                finally:
+                    if HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     
     def memory_usage(self) -> int:
         """Estimate memory usage in bytes."""
-        # Rough estimate - actual usage may vary
-        return len(self._hot_data) * 50  # Assume 50 bytes per item average
+        # More accurate memory estimation
+        import sys
+        total = 0
+        for item in self._hot_data:
+            total += sys.getsizeof(item)
+            if hasattr(item, '__dict__'):
+                for value in item.__dict__.values():
+                    total += sys.getsizeof(value)
+        return total
     
     def spill_to_disk(self, path: Optional[str] = None) -> None:
         """Force spill all data to disk."""

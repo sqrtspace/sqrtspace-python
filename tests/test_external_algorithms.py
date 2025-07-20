@@ -8,7 +8,7 @@ import random
 import gc
 import psutil
 import time
-from sqrtspace_spacetime import external_sort, external_groupby, SpaceTimeConfig
+from sqrtspace_spacetime import external_sort, external_sort_key, external_groupby, SpaceTimeConfig
 
 
 class TestExternalAlgorithms(unittest.TestCase):
@@ -177,7 +177,7 @@ class TestExternalAlgorithms(unittest.TestCase):
         print("  2. Sorting each group...")
         for group_key, group_items in grouped.items():
             # Sort by value
-            sorted_items = external_sort(
+            sorted_items = external_sort_key(
                 group_items,
                 key=lambda x: x["value"]
             )
@@ -192,7 +192,7 @@ class TestExternalAlgorithms(unittest.TestCase):
         
         # Operation 4: Final sort
         print("  4. Final sort of top items...")
-        final_sorted = external_sort(
+        final_sorted = external_sort_key(
             top_items,
             key=lambda x: x["score"],
             reverse=True

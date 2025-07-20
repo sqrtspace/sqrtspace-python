@@ -8,7 +8,7 @@ slower runtime.
 
 from sqrtspace_spacetime.config import SpaceTimeConfig
 from sqrtspace_spacetime.collections import SpaceTimeArray, SpaceTimeDict
-from sqrtspace_spacetime.algorithms import external_sort, external_groupby
+from sqrtspace_spacetime.algorithms import external_sort, external_sort_key, external_groupby
 from sqrtspace_spacetime.streams import Stream
 from sqrtspace_spacetime.memory import MemoryMonitor, MemoryPressureLevel
 
@@ -21,6 +21,7 @@ __all__ = [
     "SpaceTimeArray",
     "SpaceTimeDict",
     "external_sort",
+    "external_sort_key",
     "external_groupby",
     "Stream",
     "MemoryMonitor",
