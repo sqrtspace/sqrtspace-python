@@ -61,6 +61,7 @@ jobs:
         path: dist/
     
     - name: Test installation
+      shell: bash
       run: |
         pip install dist/*.whl
         python -c "import sqrtspace_spacetime; print(sqrtspace_spacetime.__version__)"
